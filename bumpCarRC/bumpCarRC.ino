@@ -33,10 +33,10 @@ CRGB          colorNuevo      = CRGB::Black;
 unsigned long colorHasta      = 0;
 
 // ── Pines de Hardware ────────────────────────────────────────────
-const int motorA1               = 26;
-const int motorA2               = 33;
-const int motorB1         = 14;
-const int motorB2         = 27;
+const int motorA1               = 26; //IN4
+const int motorA2               = 33;  //IN3
+const int motorB1         = 14;  //IN1
+const int motorB2         = 27;  //IN2
 const int vaporizador     = 4;
 const int PIN_EYECCION    = 19;
 const int PIN_LED_TRASERO = 13;
@@ -381,7 +381,7 @@ void checkPistasPendientes() {
         duracionPendiente = 0;
 
         myDFPlayer.stop();
-        delay(100); // Tantalio / estabilización del DFPlayer
+        delay(100); 
         myDFPlayer.play(p);
         
         audioActivo = true;
@@ -604,8 +604,6 @@ void setup() {
     randomSeed(analogRead(34));
     Serial.println("\n=== BOOT ===");
 
-    //setupRGBLed();
-
     pinMode(vaporizador,      OUTPUT);
     pinMode(PIN_EYECCION,     INPUT_PULLUP);
     pinMode(PIN_LED_TRASERO,  OUTPUT);
@@ -705,20 +703,10 @@ void onConnectedGamepad(GamepadPtr gp) {
         return;
     }
     mandoPrincipal = gp;
-    if (gp->l1() || gp->r1()) {
-        modoDualJoystick = false;
-        Serial.println("[BT] Modo SINGLE activado");
-        gp->setRumble(0xff, 0xff);
-        rumbleActive = true;
-        rumbleEnd    = millis() + 1000;
-    } else {
-        modoDualJoystick = true;
-        Serial.println("[BT] Modo DUAL activado");
-        gp->setRumble(0xc0, 0x40);
-        rumbleActive = true;
-        rumbleEnd    = millis() + 500;
-    }
-    Serial.printf("[BT] Modelo: %s\n", gp->getModelName());
+    Serial.printf("[BT] Modelo: %s conectado de forma exitosa.\n", gp->getModelName());
+    
+    // Modo inicial por defecto al conectar
+    modoDualJoystick = true; 
 }
 
 void onDisconnectedGamepad(GamepadPtr gp) {
@@ -728,6 +716,38 @@ void onDisconnectedGamepad(GamepadPtr gp) {
         detener();
         setParqueo(true);
         Serial.println("[BT] Mando liberado — carro detenido");
+    }
+}
+ //Configurar modo mando
+ bool startPreviamentePresionado = false;
+
+void chequearConfigMando(GamepadPtr gp) {
+    if (gp == nullptr) return;
+
+    // Puedes probar cambiando 0x04 por el número que use tu control (ej: 1, 2, 4 u 8)
+    // O usar la constante si el compilador ya no te da error.
+    bool startPresionado = (gp->miscButtons() & 0x04) || (gp->miscButtons() & 0x02); 
+
+    if (startPresionado) {
+        if (!startPreviamentePresionado) {
+            // ¡El botón START acaba de ser presionado! Alternamos el modo:
+            modoDualJoystick = !modoDualJoystick; 
+            
+            if (!modoDualJoystick) { // Pasó a Modo SINGLE
+                Serial.println("[BT] Cambiado a: Modo SINGLE activado");
+                gp->setRumble(0xff, 0xff); // Vibración fuerte
+                rumbleActive = true;
+                rumbleEnd    = millis() + 1000;
+            } else { // Pasó a Modo DUAL
+                Serial.println("[BT] Cambiado a: Modo DUAL activado");
+                gp->setRumble(0xc0, 0x40); // Vibración suave
+                rumbleActive = true;
+                rumbleEnd    = millis() + 500;
+            }
+            startPreviamentePresionado = true; // Bloqueamos hasta que suelte el botón
+        }
+    } else {
+        startPreviamentePresionado = false; // Se libera cuando el usuario suelta el botón
     }
 }
 
@@ -781,7 +801,7 @@ void processGamepad(GamepadPtr gp) {
     steer    = (int)(steer    * multiplicadorVelocidad);
 
     bool efectoGreen = (efectoActual == "GREEN");
-
+    chequearConfigMando(mandoPrincipal);
     if (modoDualJoystick) processMododualJoystick(throttle, steer);
     else                  processModoSingleJoystick(throttle, steer);
 

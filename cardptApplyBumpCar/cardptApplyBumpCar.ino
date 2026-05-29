@@ -10,6 +10,9 @@
 #define MAX_INTENTOS 5
 #define REENTRADA_INTERVALO 1500 
 
+#define DURACION 10000
+#define MULTIPLICADOR 0.45
+
 // Estructuras de peers
 #define MAX_PEERS 6
 struct PeerEntry {
@@ -29,7 +32,7 @@ PeerEntry peers[MAX_PEERS] = {
 
 struct PendingMsg {
     uint8_t mac[6];
-    char    msg[32];
+    char    msg[48]; // Incrementado a 48 para evitar truncamiento del nuevo formato
     int     intentos;
     bool    confirmado;
     uint32_t ultimoIntentoTiempo;
@@ -65,39 +68,45 @@ void drawUI() {
     }
 }
 
-// Función auxiliar que busca en la cola por MAC y remueve el mensaje (lo saca de la cola)
+// Función auxiliar que busca en la cola por MAC y remueve el mensaje
 void dequeue(const uint8_t* mac_addr) {
     for (int i = 0; i < pendingCount; i++) {
         if (memcmp(pendingQueue[i].mac, mac_addr, 6) == 0) {
+            Serial.printf("[COLA] Mensaje removido con éxito para %02X:%02X:%02X\n", mac_addr[3], mac_addr[4], mac_addr[5]);
             // Desplazar los elementos restantes hacia atrás
             for (int j = i; j < pendingCount - 1; j++) {
                 pendingQueue[j] = pendingQueue[j + 1];
             }
             pendingCount--;
-            break; // Salimos ya que encontramos y eliminamos el mensaje
+            break; 
         }
     }
 }
 
-// ── Tu Callback de envío adaptado perfectamente ──────────────
+// Callback de envío
 void OnDataSent(const uint8_t* mac_addr, esp_now_send_status_t status) {
     if (status == ESP_NOW_SEND_SUCCESS) {
         // PERDONAR: Si el mensaje llegó, reseteamos sus fallos a 0
         for (int i = 0; i < MAX_PEERS; i++) {
             if (memcmp(peers[i].mac, mac_addr, 6) == 0) {
                 peers[i].fallos = 0; 
+                Serial.printf("[ESPNOW] ¡Éxito! Errores reseteados para %s\n", peers[i].nombre);
                 break;
             }
         }
-        Serial.printf("[ESPNOW] Entregado a %02X:%02X:%02X:%02X:%02X:%02X\n", mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
-        dequeue(mac_addr); // Llama a nuestra función de limpieza
+        dequeue(mac_addr); 
+    } else {
+        Serial.printf("[ESPNOW] Fallo de ACK de hardware desde %02X:%02X:%02X\n", mac_addr[3], mac_addr[4], mac_addr[5]);
     }
 }
 
-// Agendar comando en la cola para todos los carros válidos
+// Agendar comando en la cola con el nuevo formato
 void queueEffectCommand(const char* efecto) {
-    char payload[32];
-    snprintf(payload, sizeof(payload), "%s%s", APPLY_CMD, efecto);
+    char payload[48];
+    // Formato modificado: APPLY:[EFECTO]:10000:0.20
+    snprintf(payload, sizeof(payload), "%s%s:%d:%.2f", APPLY_CMD, efecto, DURACION, MULTIPLICADOR);
+    
+    Serial.printf("[UI] Generando comando: %s\n", payload);
 
     for (int i = 0; i < MAX_PEERS; i++) {
         if (peers[i].fallos == 99 || (peers[i].mac[0] == 0 && peers[i].mac[5] == 0)) {
@@ -105,7 +114,8 @@ void queueEffectCommand(const char* efecto) {
         }
 
         if (pendingCount >= MAX_PENDING) {
-            break; // Cola llena
+            Serial.println("[COLA] ¡Error! Cola llena, no se pudo agendar para todos los dispositivos.");
+            break; 
         }
 
         memcpy(pendingQueue[pendingCount].mac, peers[i].mac, 6);
@@ -114,25 +124,27 @@ void queueEffectCommand(const char* efecto) {
         pendingQueue[pendingCount].confirmado = false;
         pendingQueue[pendingCount].ultimoIntentoTiempo = 0; 
         
+        Serial.printf("[COLA] Agendado para %s [%02X:%02X:%02X]\n", peers[i].nombre, peers[i].mac[3], peers[i].mac[4], peers[i].mac[5]);
         pendingCount++;
     }
 }
 
-// Procesamiento silencioso de la cola (ahora solo se encarga de reintentar y expirar)
+// Procesamiento de la cola con logs
 void procesarColaMensajes() {
     uint32_t ahora = millis();
     int i = 0;
 
     while (i < pendingCount) {
-        // Si agotó los intentos máximos sin éxito, sumamos fallo al peer y lo sacamos de la cola
+        // Si agotó los intentos máximos sin éxito
         if (pendingQueue[i].intentos >= MAX_INTENTOS) {
             for(int p=0; p < MAX_PEERS; p++) {
                 if(memcmp(peers[p].mac, pendingQueue[i].mac, 6) == 0) {
                     peers[p].fallos++;
+                    Serial.printf("[COLA] Descartado por reintentos agotados: %s. Fallos totales: %d\n", peers[p].nombre, peers[p].fallos);
                     break;
                 }
             }
-            // Lo sacamos usando la misma lógica de remoción por índice
+            // Lo sacamos de la cola
             for (int j = i; j < pendingCount - 1; j++) {
                 pendingQueue[j] = pendingQueue[j + 1];
             }
@@ -145,7 +157,14 @@ void procesarColaMensajes() {
             pendingQueue[i].intentos++;
             pendingQueue[i].ultimoIntentoTiempo = ahora;
             
-            esp_now_send(pendingQueue[i].mac, (uint8_t *)pendingQueue[i].msg, strlen(pendingQueue[i].msg) + 1);
+            Serial.printf("[ENVÍO] Intentando enviar a %02X:%02X:%02X (Intento %d/%d): %s\n", 
+                          pendingQueue[i].mac[3], pendingQueue[i].mac[4], pendingQueue[i].mac[5], 
+                          pendingQueue[i].intentos, MAX_INTENTOS, pendingQueue[i].msg);
+            
+            esp_err_t result = esp_now_send(pendingQueue[i].mac, (uint8_t *)pendingQueue[i].msg, strlen(pendingQueue[i].msg) + 1);
+            if (result != ESP_OK) {
+                Serial.printf("[ESPNOW] Error de envío de inmediato en stack (Código: %d)\n", result);
+            }
         }
         
         i++; 
@@ -157,6 +176,9 @@ void setup() {
     M5Cardputer.begin(cfg, true);
     M5Cardputer.Display.setRotation(1);
     
+    Serial.begin(115200);
+    Serial.println("[SISTEMA] M5Cardputer Iniciando...");
+    
     WiFi.mode(WIFI_STA);
     
     // Forzar Canal 1
@@ -166,11 +188,11 @@ void setup() {
     WiFi.disconnect();
 
     if (esp_now_init() != ESP_OK) {
+        Serial.println("[SISTEMA] ¡Error crítico! No se pudo inicializar ESP-NOW.");
         M5Cardputer.Display.fillScreen(RED);
         while (1) delay(100);
     }
 
-    // Registramos tu callback usando un cast explícito para asegurar compatibilidad estricta
     esp_now_register_send_cb((esp_now_send_cb_t)OnDataSent);
 
     // Registrar Peers en el stack de hardware
@@ -183,10 +205,15 @@ void setup() {
         peerInfo.channel = 1; 
         peerInfo.encrypt = false;
         
-        esp_now_add_peer(&peerInfo);
+        if(esp_now_add_peer(&peerInfo) == ESP_OK) {
+            Serial.printf("[SISTEMA] Peer registrado: %s\n", peers[i].nombre);
+        } else {
+            Serial.printf("[SISTEMA] Fallo al registrar peer: %s\n", peers[i].nombre);
+        }
     }
 
     drawUI();
+    Serial.println("[SISTEMA] Listo. Esperando interacción.");
 }
 
 void loop() {
