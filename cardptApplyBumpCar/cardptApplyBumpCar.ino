@@ -18,16 +18,21 @@ const int NUM_TIEMPOS   = sizeof(TIEMPOS) / sizeof(TIEMPOS[0]);
 int tiempoIndex         = 2;   // Default: 10 000 ms
 
 // ── Efectos / colores ─────────────────────────────────────────────────────────
-const int NUM_EFFECTS   = 4;
-const char* efectos[NUM_EFFECTS] = {"RED", "YELLOW", "BLUE", "GREEN"};
-
-// Colores de pantalla para cada botón
-const uint32_t COLORES_BTN[NUM_EFFECTS] = {
-    RED,      // RED
-    YELLOW,   // YELLOW
-    BLUE,     // BLUE
-    GREEN     // GREEN
+struct ButtonOption {
+    const char* label;
+    const char* effect;
+    uint32_t    fillColor;
+    uint16_t    textColor;
 };
+
+const ButtonOption BUTTONS[] = {
+    {"RED",    "RED",    RED,    BLACK},
+    {"YELLOW", "YELLOW", YELLOW, BLACK},
+    {"BLUE",   "BLUE",   BLUE,   WHITE},
+    {"GREEN",  "GREEN",  GREEN,  BLACK},
+};
+
+const int NUM_EFFECTS = sizeof(BUTTONS) / sizeof(BUTTONS[0]);
 
 int currentIndex = 0;
 
@@ -98,17 +103,16 @@ void drawUI() {
         }
 
         // Relleno del botón
-        d.fillRoundRect(x, BTN_Y, BTN_W, BTN_H, 4, COLORES_BTN[i]);
+        d.fillRoundRect(x, BTN_Y, BTN_W, BTN_H, 4, BUTTONS[i].fillColor);
 
-        // Etiqueta del color (texto negro sobre colores claros, blanco en azul)
-        uint16_t textCol = (i == 2) ? WHITE : BLACK;  // Azul → texto blanco
-        d.setTextColor(textCol);
+        // Etiqueta del color
+        d.setTextColor(BUTTONS[i].textColor);
         d.setTextSize(1);
 
         // Centrar texto horizontalmente
-        int tw = strlen(efectos[i]) * 6;
+        int tw = strlen(BUTTONS[i].label) * 6;
         d.setCursor(x + (BTN_W - tw) / 2, BTN_Y + (BTN_H / 2) - 4);
-        d.print(efectos[i]);
+        d.print(BUTTONS[i].label);
     }
 
     // ── Selector de tiempo (fila inferior) ───────────────────────────────────
@@ -143,8 +147,8 @@ void drawUI() {
 void mostrarFeedback() {
     auto& d = M5Cardputer.Display;
     // Fondo del color seleccionado por 400 ms
-    d.fillScreen(COLORES_BTN[currentIndex]);
-    d.setTextColor((currentIndex == 2) ? WHITE : BLACK);
+    d.fillScreen(BUTTONS[currentIndex].fillColor);
+    d.setTextColor(BUTTONS[currentIndex].textColor);
     d.setTextSize(2);
     const char* lbl = "ENVIANDO...";
     int tw = strlen(lbl) * 12;
@@ -323,7 +327,7 @@ void loop() {
         // Enter → enviar
         else if (M5Cardputer.Keyboard.isKeyPressed(KEY_ENTER)) {
             mostrarFeedback();
-            queueEffectCommand(efectos[currentIndex]);
+            queueEffectCommand(BUTTONS[currentIndex].effect);
             while (M5Cardputer.Keyboard.isKeyPressed(KEY_ENTER)) M5Cardputer.update();
         }
     }
