@@ -26,10 +26,10 @@ struct ButtonOption {
 };
 
 const ButtonOption BUTTONS[] = {
-    {"RED",    "RED",    RED,    BLACK},
-    {"YELLOW", "YELLOW", YELLOW, BLACK},
-    {"BLUE",   "BLUE",   BLUE,   WHITE},
-    {"GREEN",  "GREEN",  GREEN,  BLACK},
+    {"ROJO",      "RED",    RED,    BLACK},
+    {"AMARILLO", "YELLOW", YELLOW, BLACK},
+    {"AZUL",     "BLUE",   BLUE,   WHITE},
+    {"VERDE",    "GREEN",  GREEN,  BLACK},
 };
 
 const int NUM_EFFECTS = sizeof(BUTTONS) / sizeof(BUTTONS[0]);
@@ -82,7 +82,7 @@ void drawUI() {
     d.setTextColor(WHITE);
     d.setTextSize(1);
     d.setCursor(4, 4);
-    d.print("< > SELECCIONAR  ENTER ENVIAR");
+    d.print("< > COLOR  ENTER APLICAR");
 
     // ── Botones de color horizontales ─────────────────────────────────────────
     // Pantalla Cardputer en landscape: 240 x 135 px
