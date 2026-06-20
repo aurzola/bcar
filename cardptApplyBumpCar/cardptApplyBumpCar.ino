@@ -6,6 +6,13 @@
 #define APPLY_CMD "APPLY:"
 #define GRAY      0x7BEF
 
+constexpr uint16_t COLOR_ROJO      = 0xF800;
+constexpr uint16_t COLOR_VERDE     = 0x07E0;
+constexpr uint16_t COLOR_AZUL      = 0x001F;
+constexpr uint16_t COLOR_AMARILLO  = 0xFFE0;
+constexpr uint16_t COLOR_NEGRO     = 0x0000;
+constexpr uint16_t COLOR_BLANCO    = 0xFFFF;
+
 // Configuración de reintentos de fondo
 #define MAX_INTENTOS        5
 #define REENTRADA_INTERVALO 1500
@@ -21,15 +28,15 @@ int tiempoIndex         = 2;   // Default: 10 000 ms
 struct ButtonOption {
     const char* label;
     const char* effect;
-    uint32_t    fillColor;
+    uint16_t    fillColor;
     uint16_t    textColor;
 };
 
 const ButtonOption BUTTONS[] = {
-    {"ROJO",      "RED",    RED,    BLACK},
-    {"AMARILLO", "YELLOW", YELLOW, BLACK},
-    {"AZUL",     "BLUE",   BLUE,   WHITE},
-    {"VERDE",    "GREEN",  GREEN,  BLACK},
+    {"ROJO",      "RED",    COLOR_ROJO,     COLOR_NEGRO},
+    {"AMARILLO", "YELLOW", COLOR_AMARILLO, COLOR_NEGRO},
+    {"AZUL",     "BLUE",   COLOR_AZUL,     COLOR_BLANCO},
+    {"VERDE",    "GREEN",  COLOR_VERDE,    COLOR_NEGRO},
 };
 
 const int NUM_EFFECTS = sizeof(BUTTONS) / sizeof(BUTTONS[0]);
@@ -76,10 +83,10 @@ uint32_t feedbackInicio    = 0;
 // ─────────────────────────────────────────────────────────────────────────────
 void drawUI() {
     auto& d = M5Cardputer.Display;
-    d.fillScreen(BLACK);
+    d.fillScreen(COLOR_NEGRO);
 
     // ── Título ────────────────────────────────────────────────────────────────
-    d.setTextColor(WHITE);
+    d.setTextColor(COLOR_BLANCO);
     d.setTextSize(1);
     d.setCursor(4, 4);
     d.print("< > COLOR  ENTER APLICAR");
@@ -99,7 +106,7 @@ void drawUI() {
 
         if (i == currentIndex) {
             // Borde blanco grueso para el seleccionado
-            d.fillRoundRect(x - 3, BTN_Y - 3, BTN_W + 6, BTN_H + 6, 6, WHITE);
+            d.fillRoundRect(x - 3, BTN_Y - 3, BTN_W + 6, BTN_H + 6, 6, COLOR_BLANCO);
         }
 
         // Relleno del botón
@@ -127,7 +134,7 @@ void drawUI() {
     int  seg = TIEMPOS[tiempoIndex] / 1000;
     snprintf(buf, sizeof(buf), "< %2ds >", seg);
 
-    d.setTextColor(WHITE);
+    d.setTextColor(COLOR_BLANCO);
     d.setTextSize(2);
     int tw2 = strlen(buf) * 12;
     d.setCursor((240 - tw2) / 2, 100);
@@ -140,7 +147,7 @@ void drawUI() {
     int barY = 128;
     d.fillRect(barX, barY, BAR_W, BAR_H, GRAY);
     int filled = (BAR_W * tiempoIndex) / (NUM_TIEMPOS - 1);
-    d.fillRect(barX, barY, filled, BAR_H, WHITE);
+    d.fillRect(barX, barY, filled, BAR_H, COLOR_BLANCO);
 }
 
 // ── Flash de confirmación de envío ────────────────────────────────────────────
@@ -265,7 +272,7 @@ void setup() {
 
     if (esp_now_init() != ESP_OK) {
         Serial.println("[SISTEMA] Error crítico: ESP-NOW no inicializado.");
-        M5Cardputer.Display.fillScreen(RED);
+        M5Cardputer.Display.fillScreen(COLOR_ROJO);
         while (1) delay(100);
     }
 
