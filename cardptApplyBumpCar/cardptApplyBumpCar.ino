@@ -6,6 +6,13 @@
 #define APPLY_CMD "APPLY:"
 #define GRAY      0x7BEF
 
+constexpr uint16_t COLOR_ROJO      = 0xF800;
+constexpr uint16_t COLOR_VERDE     = 0x07E0;
+constexpr uint16_t COLOR_AZUL      = 0x001F;
+constexpr uint16_t COLOR_AMARILLO  = 0xFFE0;
+constexpr uint16_t COLOR_NEGRO     = 0x0000;
+constexpr uint16_t COLOR_BLANCO    = 0xFFFF;
+
 // Configuración de reintentos de fondo
 #define MAX_INTENTOS        5
 #define REENTRADA_INTERVALO 1500
@@ -18,16 +25,21 @@ const int NUM_TIEMPOS   = sizeof(TIEMPOS) / sizeof(TIEMPOS[0]);
 int tiempoIndex         = 2;   // Default: 10 000 ms
 
 // ── Efectos / colores ─────────────────────────────────────────────────────────
-const int NUM_EFFECTS   = 4;
-const char* efectos[NUM_EFFECTS] = {"RED", "YELLOW", "BLUE", "GREEN"};
-
-// Colores de pantalla para cada botón
-const uint32_t COLORES_BTN[NUM_EFFECTS] = {
-    RED,      // RED
-    YELLOW,   // YELLOW
-    BLUE,     // BLUE
-    GREEN     // GREEN
+struct ButtonOption {
+    const char* label;
+    const char* effect;
+    uint16_t    fillColor;
+    uint16_t    textColor;
 };
+
+const ButtonOption BUTTONS[] = {
+    {"ROJO",      "RED",    COLOR_ROJO,     COLOR_NEGRO},
+    {"AMARILLO", "YELLOW", COLOR_AMARILLO, COLOR_NEGRO},
+    {"AZUL",     "BLUE",   COLOR_AZUL,     COLOR_BLANCO},
+    {"VERDE",    "GREEN",  COLOR_VERDE,    COLOR_NEGRO},
+};
+
+const int NUM_EFFECTS = sizeof(BUTTONS) / sizeof(BUTTONS[0]);
 
 int currentIndex = 0;
 
@@ -71,13 +83,13 @@ uint32_t feedbackInicio    = 0;
 // ─────────────────────────────────────────────────────────────────────────────
 void drawUI() {
     auto& d = M5Cardputer.Display;
-    d.fillScreen(BLACK);
+    d.fillScreen(COLOR_NEGRO);
 
     // ── Título ────────────────────────────────────────────────────────────────
-    d.setTextColor(WHITE);
+    d.setTextColor(COLOR_BLANCO);
     d.setTextSize(1);
     d.setCursor(4, 4);
-    d.print("< > SELECCIONAR  ENTER ENVIAR");
+    d.print("< > COLOR  ENTER APLICAR");
 
     // ── Botones de color horizontales ─────────────────────────────────────────
     // Pantalla Cardputer en landscape: 240 x 135 px
@@ -94,21 +106,20 @@ void drawUI() {
 
         if (i == currentIndex) {
             // Borde blanco grueso para el seleccionado
-            d.fillRoundRect(x - 3, BTN_Y - 3, BTN_W + 6, BTN_H + 6, 6, WHITE);
+            d.fillRoundRect(x - 3, BTN_Y - 3, BTN_W + 6, BTN_H + 6, 6, COLOR_BLANCO);
         }
 
         // Relleno del botón
-        d.fillRoundRect(x, BTN_Y, BTN_W, BTN_H, 4, COLORES_BTN[i]);
+        d.fillRoundRect(x, BTN_Y, BTN_W, BTN_H, 4, BUTTONS[i].fillColor);
 
-        // Etiqueta del color (texto negro sobre colores claros, blanco en azul)
-        uint16_t textCol = (i == 2) ? WHITE : BLACK;  // Azul → texto blanco
-        d.setTextColor(textCol);
+        // Etiqueta del color
+        d.setTextColor(BUTTONS[i].textColor);
         d.setTextSize(1);
 
         // Centrar texto horizontalmente
-        int tw = strlen(efectos[i]) * 6;
+        int tw = strlen(BUTTONS[i].label) * 6;
         d.setCursor(x + (BTN_W - tw) / 2, BTN_Y + (BTN_H / 2) - 4);
-        d.print(efectos[i]);
+        d.print(BUTTONS[i].label);
     }
 
     // ── Selector de tiempo (fila inferior) ───────────────────────────────────
@@ -123,7 +134,7 @@ void drawUI() {
     int  seg = TIEMPOS[tiempoIndex] / 1000;
     snprintf(buf, sizeof(buf), "< %2ds >", seg);
 
-    d.setTextColor(WHITE);
+    d.setTextColor(COLOR_BLANCO);
     d.setTextSize(2);
     int tw2 = strlen(buf) * 12;
     d.setCursor((240 - tw2) / 2, 100);
@@ -136,15 +147,15 @@ void drawUI() {
     int barY = 128;
     d.fillRect(barX, barY, BAR_W, BAR_H, GRAY);
     int filled = (BAR_W * tiempoIndex) / (NUM_TIEMPOS - 1);
-    d.fillRect(barX, barY, filled, BAR_H, WHITE);
+    d.fillRect(barX, barY, filled, BAR_H, COLOR_BLANCO);
 }
 
 // ── Flash de confirmación de envío ────────────────────────────────────────────
 void mostrarFeedback() {
     auto& d = M5Cardputer.Display;
     // Fondo del color seleccionado por 400 ms
-    d.fillScreen(COLORES_BTN[currentIndex]);
-    d.setTextColor((currentIndex == 2) ? WHITE : BLACK);
+    d.fillScreen(BUTTONS[currentIndex].fillColor);
+    d.setTextColor(BUTTONS[currentIndex].textColor);
     d.setTextSize(2);
     const char* lbl = "ENVIANDO...";
     int tw = strlen(lbl) * 12;
@@ -261,7 +272,7 @@ void setup() {
 
     if (esp_now_init() != ESP_OK) {
         Serial.println("[SISTEMA] Error crítico: ESP-NOW no inicializado.");
-        M5Cardputer.Display.fillScreen(RED);
+        M5Cardputer.Display.fillScreen(COLOR_ROJO);
         while (1) delay(100);
     }
 
@@ -323,7 +334,7 @@ void loop() {
         // Enter → enviar
         else if (M5Cardputer.Keyboard.isKeyPressed(KEY_ENTER)) {
             mostrarFeedback();
-            queueEffectCommand(efectos[currentIndex]);
+            queueEffectCommand(BUTTONS[currentIndex].effect);
             while (M5Cardputer.Keyboard.isKeyPressed(KEY_ENTER)) M5Cardputer.update();
         }
     }
